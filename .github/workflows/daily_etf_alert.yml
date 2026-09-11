@@ -1,0 +1,30 @@
+name: Daily ETF Predictor Alert
+
+on:
+  schedule:
+    # 台灣時間平日 14:45 執行 (UTC 時間 06:45)
+    - cron: '45 6 * * 1-5'
+  workflow_dispatch: # 支援手動在網頁上一鍵測試觸發
+
+jobs:
+  run-predictor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下載程式碼
+        uses: actions/checkout@v3
+
+      - name: 設定 Python 環境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 安裝相依套件
+        run: |
+          pip install requests pandas line-bot-sdk
+
+      - name: 執行預測並發送 Line 推播
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: |
+          python etf_predictor_line.py
