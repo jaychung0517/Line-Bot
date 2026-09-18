@@ -139,7 +139,7 @@ if __name__ == "__main__":
     potential_additions, must_delete = analyze_0050_changes(df_market, current_0050)
 
     # 組裝推播文字
-    msg_lines = ["【0050 換股預測雷達】", ""]
+    msg_lines = ["【0050 換股預測雷達-3、6、9、12 月】", ""]
 
     msg_lines.append(" 潛在納入候選 Top 5 (已排除ETF):")
     if not potential_additions.empty:
