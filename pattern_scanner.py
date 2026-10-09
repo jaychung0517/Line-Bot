@@ -44,7 +44,7 @@ def fetch_top_stocks() -> dict:
             for row in data["data"]:
                 code = str(row[1]).strip()
                 name = str(row[2]).strip()
-                # 只保留 4 碼普通股，排除認購售權證與 00 開頭之 ETF
+                # 只保留 4 碼普通股，排除權證與 00 開頭之 ETF
                 if len(code) == 4 and code.isdigit() and not code.startswith("00"):
                     stock_dict[code] = name
     except Exception as e:
@@ -71,7 +71,6 @@ def check_spring(df: pd.DataFrame) -> bool:
     """橫向整理破底翻 (Spring) 判定"""
     if len(df) < 30:
         return False
-    # 觀察倒數第 22 天到倒數第 3 天的盤整區 (20 天)
     consolidation = df.iloc[-23:-3]
     r_high = consolidation['High'].max()
     r_low = consolidation['Low'].min()
@@ -100,11 +99,9 @@ def main():
         print("未取得股票名單，程序終止。")
         return
 
-    # 組裝批次下載清單 (格式: 2330.TW 2317.TW ...)
     tickers = [f"{code}.TW" for code in stock_dict.keys()]
     
     print("正在批次下載 K 線數據...")
-    # 一次性下載所有股票，大幅提升速度並避免觸發 Yahoo API 限制
     data = yf.download(tickers, period="3mo", interval="1d", group_by="ticker", progress=False)
 
     spring_list = []
@@ -120,11 +117,11 @@ def main():
             if len(df) < 30:
                 continue
 
-            # 雙重保護：確認近 5 日日均量大於 1,000 張
+            # 確認近 5 日日均量大於 1,000 張
             if df['Volume'].tail(5).mean() < 1_000_000:
                 continue
 
-            stock_label = f"{code} {name}"
+            stock_label = f"• {code} {name}"
             
             if check_spring(df):
                 spring_list.append(stock_label)
@@ -133,11 +130,14 @@ def main():
         except Exception as e:
             continue
 
-    # 組裝推播文字
+    # 格式化個股名單為換行排列
+    spring_text = "\n".join(spring_list) if spring_list else "無符合標的"
+    fvg_text = "\n".join(fvg_list) if fvg_list else "無符合標的"
+
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     report = f"📊【明日早盤觀察名單】({today_str})\n\n"
-    report += f"🔍 橫向整理破底翻:\n{', '.join(spring_list) if spring_list else '無符合標的'}\n\n"
-    report += f"🎯 多頭 FVG/OB 回踩:\n{', '.join(fvg_list) if fvg_list else '無符合標的'}"
+    report += f"🔍 橫向整理破底翻:\n{spring_text}\n\n"
+    report += f"🎯 多頭 FVG/OB 回踩:\n{fvg_text}"
 
     print(report)
     send_line_push(report)
