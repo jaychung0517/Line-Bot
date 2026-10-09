@@ -1,12 +1,8 @@
 name: Daily ETF Predictor Alert
 
 on:
-  schedule:
-    # 台灣時間平日 14:45 (UTC 06:45)
-    - cron: '45 6 * * 1-5'
-  workflow_dispatch:
+  workflow_dispatch: # 支援 Cron-Job.org 外部 API 觸發與網頁手動觸發
 
-# 賦予 Actions 寫入權限以更新 JSON 紀錄檔
 permissions:
   contents: write
 
