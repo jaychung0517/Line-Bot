@@ -17,7 +17,6 @@ HISTORY_FILE = "previous_ranks.json"
 # 1. 讀取與儲存歷史名次 (JSON)
 # -------------------------------------------------------------
 def load_previous_ranks() -> dict:
-    """讀取前一次執行的個股名次紀錄 { '股票代號': rank }"""
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
@@ -27,7 +26,6 @@ def load_previous_ranks() -> dict:
     return {}
 
 def save_current_ranks(current_ranks: dict):
-    """將當天全市場個股名次存入 JSON 檔案"""
     try:
         with open(HISTORY_FILE, "w", encoding="utf-8") as f:
             json.dump(current_ranks, f, ensure_ascii=False, indent=2)
@@ -49,7 +47,7 @@ def get_yuanta_0050_components() -> set:
     }
 
     try:
-        response = requests.get(url, params=params, headers=headers, timeout=15)
+        response = requests.get(url, params=params, headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
             holding_list = data.get("data", []) if isinstance(data, dict) else data
@@ -79,24 +77,32 @@ def get_yuanta_0050_components() -> set:
 
 
 # -------------------------------------------------------------
-# 3. 爬取 TWSE 證交所全市場每日收盤市值
+# 3. 極速取得證交所全市場最新市值 (單一快取彙總表)
 # -------------------------------------------------------------
 def fetch_twse_market_cap():
     cap_url = "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX20"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    try:
-        cap_res = requests.get(cap_url, headers=headers, timeout=15)
-        records = []
-        if cap_res.status_code == 200:
-            for item in cap_res.json():
-                records.append({
-                    "ticker": item.get("Code", "").strip(),
-                    "name": item.get("Name", "").strip(),
-                    "market_cap": float(item.get("MarketCapitalization", "0").replace(",", ""))
-                })
-            return pd.DataFrame(records)
-    except Exception as e:
-        print(f"證交所 API 連線異常: {e}")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+    
+    # 支援 2 次快速重試機制
+    for attempt in range(2):
+        try:
+            res = requests.get(cap_url, headers=headers, timeout=8)
+            if res.status_code == 200:
+                raw_data = res.json()
+                records = []
+                for item in raw_data:
+                    records.append({
+                        "ticker": item.get("Code", "").strip(),
+                        "name": item.get("Name", "").strip(),
+                        "market_cap": float(item.get("MarketCapitalization", "0").replace(",", ""))
+                    })
+                return pd.DataFrame(records)
+        except Exception as e:
+            print(f"嘗試抓取證交所資料 (第 {attempt+1} 次) 逾時或異常: {e}")
+            
     return pd.DataFrame()
 
 
@@ -123,7 +129,7 @@ def analyze_0050_changes(df_market: pd.DataFrame, current_components: set):
     # 潛在納入候選：非現有成分股且依市值排序，取前 5 名
     potential_additions = df_stocks[~df_stocks["is_current"]].head(5)
 
-    # 同步回傳全市場當前排名字典 {ticker: rank}，供存檔比對
+    # 記錄全市場排序供下次比對
     all_ranks_dict = dict(zip(df_stocks["ticker"], df_stocks["rank"]))
 
     return potential_additions, all_ranks_dict
@@ -179,9 +185,9 @@ if __name__ == "__main__":
             # 比對昨日名次
             if ticker in prev_ranks:
                 prev_rank = prev_ranks[ticker]
-                if current_rank < prev_rank:      # 名次數字變小 = 排名上升
+                if current_rank < prev_rank:      # 排名數值變小 = 上升
                     rank_str = f"第{current_rank}名↑"
-                elif current_rank > prev_rank:    # 名次數字變大 = 排名下降
+                elif current_rank > prev_rank:    # 排名數值變大 = 下降
                     rank_str = f"第{current_rank}名↓"
                 else:
                     rank_str = f"第{current_rank}名="
@@ -202,5 +208,5 @@ if __name__ == "__main__":
     else:
         print("本地測試未提供 Token，已略過 LINE 發送。")
 
-    # 存入今日名次供下次比對
+    # 存入今日名次
     save_current_ranks(all_ranks)
